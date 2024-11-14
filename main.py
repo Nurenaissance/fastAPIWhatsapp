@@ -224,7 +224,7 @@ def daily_task():
                         datetime_time.sleep(interval)  # Delay execution for `time_to_wait` seconds
 
 
-                    response = requests.post('http://localhost:8080/send-template', json=body,headers=headers)
+                    response = requests.post('https://whatsappbotserver.azurewebsites.net/send-template', json=body,headers=headers)
                     # Check if the request was successful
                     if response.status_code == 200:
                         print(f"Event '{event.type}' processed successfully.")
