@@ -15,4 +15,4 @@ starlette==0.41.2
 typing_extensions==4.12.2
 urllib3==2.2.3
 uvicorn
-
+psycopg2
