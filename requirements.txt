@@ -16,3 +16,4 @@ typing_extensions==4.12.2
 urllib3==2.2.3
 uvicorn
 psycopg2
+psycopg2-binary
