@@ -17,3 +17,4 @@ urllib3==2.2.3
 uvicorn
 psycopg2
 psycopg2-binary
+fastapi[all]
