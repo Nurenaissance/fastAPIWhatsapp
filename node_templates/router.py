@@ -11,7 +11,10 @@ def read_nodetemps(request: Request, db: orm.Session = Depends(get_db)):
     tenant_id = request.headers.get("X-Tenant-Id")
     if not tenant_id:
         return HTTPException(status_code=400, detail="Tenant ID is missing in headers")
-    
+        
+    if tenant_id == "demo":
+        tenant_id = 'ai'
+        
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
