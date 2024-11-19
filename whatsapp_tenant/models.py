@@ -42,3 +42,9 @@ class MessageStatus(Base):
     def __repr__(self):
         return f"<MessageStatus(message_id={self.message_id}, user_phone_number={self.user_phone_number})>"
 
+class BroadcastGroups(Base):
+    __tablename__ = "broadcast_groups"
+
+    name = Column(String(100), nullable=False)
+    id = Column(String(50), primary_key=True)
+    members = Column(JSON)

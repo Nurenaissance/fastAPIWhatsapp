@@ -1,9 +1,12 @@
 from fastapi import APIRouter, Request, Depends ,HTTPException, Header
 from sqlalchemy import orm
 from config.database import get_db
-from .models import WhatsappTenantData, MessageStatus
+from .models import WhatsappTenantData, MessageStatus, BroadcastGroups
 from product.models import Product
 from typing import Optional
+from .schema import BroadcastGroupResponse, BroadcastGroupCreate
+from .crud import create_broadcast_group, get_broadcast_group, get_all_broadcast_groups
+from typing import List, Optional
 
 router = APIRouter()
 
@@ -37,7 +40,6 @@ def get_whatsapp_tenant_data(x_tenant_id: Optional[str] = Header(None), bpid: Op
         catalog_data_json = catalog_data
 
         return {"whatsapp_data": whatsapp_data, "catalog_data": catalog_data}
-        return responses.JSONResponse(content={"whatsapp_data": whatsapp_data_json, "catalog_data": catalog_data_json})
 
     except Exception as e:
         print("Error occurred with tenant:", x_tenant_id)
@@ -54,7 +56,7 @@ def get_status(request: Request, db: orm.Session = Depends(get_db)):
         for status in statuses:
             bg_group = status.broadcast_group
             if bg_group not in groupedStatuses:
-                groupedStatuses[bg_group] = {"sent": 0,"delivered": 0,"read": 0,"replied": 0,"failed": 0}
+                groupedStatuses[bg_group] = { "name": status.broadcast_group_name, "sent": 0,"delivered": 0,"read": 0,"replied": 0,"failed": 0}
             
             if status.sent:
                 groupedStatuses[bg_group]["sent"] += 1
@@ -67,54 +69,101 @@ def get_status(request: Request, db: orm.Session = Depends(get_db)):
             if status.failed:
                 groupedStatuses[bg_group]["failed"] += 1
         
-
-
-        # distinct_groups = db.execute(select(MessageStatus.broadcast_group).distinct()).scalars().all()
-
-        # for group in distinct_groups:
-
-        #     sent_count = db.query(func.count()).filter(MessageStatus.sent == True, MessageStatus.broadcast_group == group).scalar()
-        #     delivered_count = db.query(func.count()).filter(MessageStatus.delivered == True, MessageStatus.broadcast_group == group).scalar()
-        #     read_count = db.query(func.count()).filter(MessageStatus.read == True, MessageStatus.broadcast_group == group).scalar()
-        #     failed_count = db.query(func.count()).filter(MessageStatus.failed == True, MessageStatus.broadcast_group == group).scalar()
-        #     replied_count = db.query(func.count()).filter(MessageStatus.replied == True, MessageStatus.broadcast_group == group).scalar()
-
-        #     groupedStatuses[group] = {"sent": sent_count, "delivered": delivered_count ,"read": read_count, "replied": replied_count, "failed": failed_count}
-
-        
         return groupedStatuses
-            
-        # statuses = db.query(MessageStatus).all()
-        # sent_count = db.query(func.count()).filter(MessageStatus.sent == True).scalar()
-        # delivered_count = db.query(func.count()).filter(MessageStatus.delivered == True).scalar()
-        # read_count = db.query(func.count()).filter(MessageStatus.read == True).scalar()
-        # failed_count = db.query(func.count()).filter(MessageStatus.failed == True).scalar()
-        # replied_count = db.query(func.count()).filter(MessageStatus.replied == True).scalar()
-
-
-        # for status in statuses:
-        #     bg_group = status.broadcast_group or "null"
-        #     sent = status.sent
-        #     delivered = status.delivered
-        #     read = status.delivered
-        #     replied = status.replied
-        #     failed = status.failed
-            
-        #     if bg_group not in groupedStatuses:
-        #         groupedStatuses[bg_group] = []
-
-        #     groupedStatuses[bg_group].append(status)
-
-        # # Combine the counts in a dictionary
-        # counts = {
-        #     "sent_count": sent_count,
-        #     "delivered_count": delivered_count,
-        #     "read_count": read_count,
-        #     "failed_count": failed_count,
-        #     "replied_count": replied_count,
-        # }
-
 
     except Exception as e:
-        # Catch-all for any other unexpected errors
         raise HTTPException(status_code=500, detail="An unexpected error occurred") from e
+
+@router.post("/set-status/")
+async def set_status(request: Request, db: orm.Session =Depends(get_db)):
+    try:
+        data = await request.json()
+
+        business_phone_number_id = data.get("business_phone_number_id")
+        user_phone_number = data.get("user_phone_number")
+        broadcast_group = data.get("broadcast_group")
+
+        message_status = db.query(MessageStatus).filter(
+            MessageStatus.business_phone_number_id == business_phone_number_id,
+            MessageStatus.user_phone_number == user_phone_number,
+            MessageStatus.broadcast_group == broadcast_group
+        ).first()
+
+        if not message_status:
+            message_status = MessageStatus(
+                business_phone_number_id=business_phone_number_id,
+                user_phone_number=user_phone_number,
+                broadcast_group=broadcast_group,
+                broadcast_group_name=data.get("broadcast_group_name"),
+                sent=0,
+                delivered=0,
+                read=0,
+                replied=0,
+                failed=0,
+            )
+            db.add(message_status)
+
+        for key in ["sent", "delivered", "read", "replied", "failed"]:
+            if key in data and isinstance(data[key], bool):  # Check if key exists and is boolean
+                if data[key]:
+                    setattr(message_status, key, getattr(message_status, key, 0) + 1)
+                else:
+                    setattr(message_status, key, max(getattr(message_status, key, 0) - 1, 0))
+
+        
+        db.commit()
+        db.refresh(message_status)
+
+        return {"message": "Status updated successfully", "data": message_status}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="An unexpected error occurred") from e
+
+@router.post("/broadcast-groups/", response_model=BroadcastGroupResponse)
+def create_group(request: BroadcastGroupCreate, db: orm.Session = Depends(get_db)):
+    try:
+        members = [member.dict() for member in request.members]
+
+
+        new_group = BroadcastGroups(
+            id=request.id,  # You can generate the ID if not provided
+            name=request.name,
+            members=members
+        )
+        print("New Group: ", request.id, request.name, members)
+
+        db.add(new_group)
+        db.commit()
+        db.refresh(new_group)
+
+        
+        return BroadcastGroupResponse(
+            id=new_group.id,
+            name=new_group.name,
+            members=new_group.members
+        )
+
+    except Exception as e:
+        db.rollback()
+        print("Error creating groups: ", str(e))
+        raise HTTPException(status_code=400, detail="Error in post: creating the broadcast group") from e
+
+@router.get("/broadcast-groups/", response_model=List[BroadcastGroupResponse])
+def get_groups(db: orm.Session = Depends(get_db)):
+    try:
+        groups = get_all_broadcast_groups(db=db)
+        return groups
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Error fetching the broadcast groups") from e
+
+
+@router.get("/broadcast-groups/{group_id}", response_model=BroadcastGroupResponse)
+def get_group(group_id: str, db: orm.Session = Depends(get_db)):
+    try:
+        
+        group = get_broadcast_group(db=db, group_id=group_id)
+        if group is None:
+            raise HTTPException(status_code=404, detail="Broadcast group not found")
+        return group
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Error fetching the broadcast group") from e
