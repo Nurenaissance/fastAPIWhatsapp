@@ -26,7 +26,7 @@ def read_nodetemps(request: Request, db: orm.Session = Depends(get_db)):
 
     return node_temps
 
-@router.get("/node-templates/{node_template_id}")
+@router.get("/node-templates/{node_template_id}/")
 def get_node_temps(node_template_id : int, x_tenant_id: Optional[str] = Header(None)  ,db: orm.Session = Depends(get_db)):
     if not x_tenant_id:
         return HTTPException(500, detail="Tenant ID is missing")

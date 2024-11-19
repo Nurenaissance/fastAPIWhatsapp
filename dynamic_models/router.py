@@ -6,7 +6,7 @@ from models import Base
 
 router = APIRouter()
 
-@router.get("/dynamic-models")
+@router.get("/dynamic-models/")
 def get_dynamic_model( request: Request , db: orm.Session = Depends(get_db)):
     response_data =[]
 
@@ -26,7 +26,7 @@ def get_dynamic_model( request: Request , db: orm.Session = Depends(get_db)):
     
     return response_data
 
-@router.get("/dynamic-models/{model_name}")
+@router.get("/dynamic-models/{model_name}/")
 def get_dynamic_model_data(model_name: str, db: orm.Session = Depends(get_db)):
     try:
         # print("Databsse Bind URL: ", db.bind)

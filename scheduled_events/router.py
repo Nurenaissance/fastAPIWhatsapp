@@ -117,7 +117,7 @@ def create_scheduled_event(event: ScheduledEventCreate, db: orm.Session = Depend
     newEvent = True
     return db_event
 
-@router.get("/scheduled-events/{event_id}", response_model=ScheduledEventResponse)
+@router.get("/scheduled-events/{event_id}/", response_model=ScheduledEventResponse)
 def get_scheduled_event(event_id: int, db: orm.Session = Depends(get_db)):
     db_event = db.query(ScheduledEvent).filter(ScheduledEvent.id == event_id).first()
     if db_event is None:
@@ -129,7 +129,7 @@ def list_scheduled_events(db: orm.Session = Depends(get_db)):
     events = db.query(ScheduledEvent).all()
     return events
 
-@router.delete("/scheduled-events/{event_id}", status_code=204)
+@router.delete("/scheduled-events/{event_id}/", status_code=204)
 def delete_scheduled_event(event_id: int, db: orm.Session = Depends(get_db)):
     db_event = db.query(ScheduledEvent).filter(ScheduledEvent.id == event_id).first()
     if db_event is None:

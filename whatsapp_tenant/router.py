@@ -157,7 +157,7 @@ def get_groups(db: orm.Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Error fetching the broadcast groups") from e
 
 
-@router.get("/broadcast-groups/{group_id}", response_model=BroadcastGroupResponse)
+@router.get("/broadcast-groups/{group_id}/", response_model=BroadcastGroupResponse)
 def get_group(group_id: str, db: orm.Session = Depends(get_db)):
     try:
         
