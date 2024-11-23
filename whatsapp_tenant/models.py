@@ -38,6 +38,9 @@ class MessageStatus(Base):
     broadcast_group_name = Column(String(100), nullable=True)
     replied = Column(Boolean, default=False, nullable=False)                    # Default value set
     failed = Column(Boolean, default=False, nullable=False)                     # Default value set
+    tenant_id = Column(String(50), ForeignKey("tenant_tenant.id"), nullable=True)  # Adjusted ForeignKey reference
+
+    tenant = relationship("Tenant", back_populates="message_status")
 
     def __repr__(self):
         return f"<MessageStatus(message_id={self.message_id}, user_phone_number={self.user_phone_number})>"

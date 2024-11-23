@@ -18,6 +18,7 @@ class Tenant(Base):
     products = relationship("Product", back_populates="tenant")
     node_templates = relationship("NodeTemplate", back_populates="tenant")
     dynamic_models = relationship("DynamicModel", back_populates="tenant")
-
+    message_status = relationship("MessageStatus", back_populates="tenant")
+    
     def __repr__(self):
         return f"<Tenant(id={self.id}, organization={self.organization})>"

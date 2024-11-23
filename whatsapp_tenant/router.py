@@ -50,7 +50,10 @@ def get_whatsapp_tenant_data(x_tenant_id: Optional[str] = Header(None), bpid: Op
 @router.get("/get-status/")
 def get_status(request: Request, db: orm.Session = Depends(get_db)):
     try:
-        statuses = db.query(MessageStatus).all()
+        tenant_id = request.headers.get("X-Tenant-Id")
+        # whatsapp_data = db.query(WhatsappTenantData).filter(WhatsappTenantData.tenant_id == tenant_id).all()
+
+        statuses = db.query(MessageStatus).filter(MessageStatus.tenant_id == tenant_id)
         
         groupedStatuses = {}
         for status in statuses:
@@ -72,7 +75,7 @@ def get_status(request: Request, db: orm.Session = Depends(get_db)):
         return groupedStatuses
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail="An unexpected error occurred") from e
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}",) 
 
 @router.post("/set-status/")
 async def set_status(request: Request, db: orm.Session =Depends(get_db)):
