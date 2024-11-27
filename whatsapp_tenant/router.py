@@ -58,8 +58,9 @@ def get_status(request: Request, db: orm.Session = Depends(get_db)):
         groupedStatuses = {}
         for status in statuses:
             bg_group = status.broadcast_group
+            template_name = status.template_name
             if bg_group not in groupedStatuses:
-                groupedStatuses[bg_group] = { "name": status.broadcast_group_name, "sent": 0,"delivered": 0,"read": 0,"replied": 0,"failed": 0}
+                groupedStatuses[bg_group] = { "name": status.broadcast_group_name, "sent": 0,"delivered": 0,"read": 0,"replied": 0,"failed": 0, "template_name": template_name}
             
             if status.sent:
                 groupedStatuses[bg_group]["sent"] += 1
@@ -123,15 +124,15 @@ async def set_status(request: Request, db: orm.Session =Depends(get_db)):
         raise HTTPException(status_code=500, detail="An unexpected error occurred") from e
 
 @router.post("/broadcast-groups/", response_model=BroadcastGroupResponse)
-def create_group(request: BroadcastGroupCreate, db: orm.Session = Depends(get_db)):
+def create_group(request: BroadcastGroupCreate, db: orm.Session = Depends(get_db) , x_tenant_id : Optional[str] = Header(None)):
     try:
         members = [member.dict() for member in request.members]
-
 
         new_group = BroadcastGroups(
             id=request.id,  # You can generate the ID if not provided
             name=request.name,
-            members=members
+            members=members,
+            tenant_id = x_tenant_id
         )
         print("New Group: ", request.id, request.name, members)
 
@@ -143,7 +144,8 @@ def create_group(request: BroadcastGroupCreate, db: orm.Session = Depends(get_db
         return BroadcastGroupResponse(
             id=new_group.id,
             name=new_group.name,
-            members=new_group.members
+            members=new_group.members,
+            tenant_id = x_tenant_id
         )
 
     except Exception as e:
@@ -152,9 +154,9 @@ def create_group(request: BroadcastGroupCreate, db: orm.Session = Depends(get_db
         raise HTTPException(status_code=400, detail="Error in post: creating the broadcast group") from e
 
 @router.get("/broadcast-groups/", response_model=List[BroadcastGroupResponse])
-def get_groups(db: orm.Session = Depends(get_db)):
+def get_groups(db: orm.Session = Depends(get_db), x_tenant_id : Optional[str] = Header(None)):
     try:
-        groups = get_all_broadcast_groups(db=db)
+        groups = get_all_broadcast_groups( x_tenant_id,db=db)
         return groups
     except Exception as e:
         raise HTTPException(status_code=400, detail="Error fetching the broadcast groups") from e

@@ -36,6 +36,7 @@ class MessageStatus(Base):
     message_id = Column(String(300), primary_key=True)                          # Primary key retained
     broadcast_group = Column(String(50), nullable=True)
     broadcast_group_name = Column(String(100), nullable=True)
+    template_name = Column(String(50), nullable=True)
     replied = Column(Boolean, default=False, nullable=False)                    # Default value set
     failed = Column(Boolean, default=False, nullable=False)                     # Default value set
     tenant_id = Column(String(50), ForeignKey("tenant_tenant.id"), nullable=True)  # Adjusted ForeignKey reference
@@ -51,3 +52,6 @@ class BroadcastGroups(Base):
     name = Column(String(100), nullable=False)
     id = Column(String(50), primary_key=True)
     members = Column(JSON)
+    tenant_id = Column(String(50), ForeignKey("tenant_tenant.id"), nullable=True)  # Adjusted ForeignKey reference
+
+    tenant = relationship("Tenant", back_populates="broadcast_groups")

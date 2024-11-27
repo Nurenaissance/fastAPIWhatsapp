@@ -17,5 +17,5 @@ def get_broadcast_group(db: Session, group_id: str):
     return db.query(BroadcastGroups).filter(BroadcastGroups.id == group_id).first()
 
 # CRUD for getting all BroadcastGroups
-def get_all_broadcast_groups(db: Session):
-    return db.query(BroadcastGroups).all()
+def get_all_broadcast_groups( tenant_id , db: Session):
+    return db.query(BroadcastGroups).filter(BroadcastGroups.tenant_id == tenant_id).all()
