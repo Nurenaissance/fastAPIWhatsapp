@@ -11,3 +11,6 @@ class ScheduledEvent(Base):
     value = Column(JSON, nullable=False)
     date = Column(Date, nullable=True)  # Stores the date of the event
     time = Column(Time, nullable=True)  # Stores the time of the event
+    tenant_id = Column(String(50), ForeignKey("tenant_tenant.id"), nullable=True)  # Adjusted ForeignKey reference
+
+    tenant = relationship("Tenant", back_populates="scheduled_events")

@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends ,HTTPException
+from fastapi import APIRouter, Depends ,HTTPException, Header
 from sqlalchemy import orm
 from config.database import get_db, SessionLocal
 from .models import ScheduledEvent
-from typing import  List
+from typing import  List, Optional
 from .schema import ScheduledEventCreate, ScheduledEventResponse
 from datetime import datetime
 import schedule, time as datetime_time, requests, threading
@@ -125,8 +125,8 @@ def get_scheduled_event(event_id: int, db: orm.Session = Depends(get_db)):
     return db_event
 
 @router.get("/scheduled-events/", response_model=List[ScheduledEventResponse])
-def list_scheduled_events(db: orm.Session = Depends(get_db)):
-    events = db.query(ScheduledEvent).all()
+def list_scheduled_events(x_tenant_id : Optional[str] = Header(None), db: orm.Session = Depends(get_db)):
+    events = db.query(ScheduledEvent).filter(ScheduledEvent.tenant_id == x_tenant_id).all()
     return events
 
 @router.delete("/scheduled-events/{event_id}/", status_code=204)
