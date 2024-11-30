@@ -107,13 +107,15 @@ def read_root():
 
 
 @router.post("/scheduled-events/", response_model=ScheduledEventResponse)
-def create_scheduled_event(event: ScheduledEventCreate, db: orm.Session = Depends(get_db)):
+def create_scheduled_event(event: ScheduledEventCreate, x_tenant_id: Optional[str] = Header(None) ,db: orm.Session = Depends(get_db)):
     global newEvent
-    db_event = ScheduledEvent(**event.dict())
+    if not x_tenant_id:
+        raise HTTPException(status_code=400, detail="Tenant ID is required in the headers.")
+
+    db_event = ScheduledEvent(**event.dict(), tenant_id = x_tenant_id)
     db.add(db_event)
     db.commit()
     db.refresh(db_event)
-    # background_tasks.add_task(daily_task)
     newEvent = True
     return db_event
 
