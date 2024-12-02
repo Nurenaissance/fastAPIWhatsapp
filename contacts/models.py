@@ -19,6 +19,10 @@ class Contact(Base):
     tenant = relationship("Tenant", back_populates="contacts")  # Corrected back_populates
     bg_id = Column(String(50), nullable=True)
     bg_name = Column(String(50), nullable=True)
+    last_seen = Column(DateTime, default=datetime.utcnow, nullable=True)
+    last_delivered = Column(DateTime, default=datetime.utcnow, nullable=True)
+    last_replied = Column(DateTime, default=datetime.utcnow, nullable=True)
+
 
     def __repr__(self):
         return f"<Contact(name={self.name})>"
