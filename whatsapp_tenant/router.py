@@ -59,19 +59,24 @@ def get_status(request: Request, db: orm.Session = Depends(get_db)):
         for status in statuses:
             bg_group = status.broadcast_group
             template_name = status.template_name
-            if bg_group not in groupedStatuses:
-                groupedStatuses[bg_group] = { "name": status.broadcast_group_name, "sent": 0,"delivered": 0,"read": 0,"replied": 0,"failed": 0, "template_name": template_name}
+            if bg_group == None:
+                key = template_name
+            else:
+                key = bg_group
+
+            if key not in groupedStatuses:
+                groupedStatuses[key] = { "name": status.broadcast_group_name or None, "sent": 0,"delivered": 0,"read": 0,"replied": 0,"failed": 0, "template_name": template_name}
             
             if status.sent:
-                groupedStatuses[bg_group]["sent"] += 1
+                groupedStatuses[key]["sent"] += 1
             if status.delivered:
-                groupedStatuses[bg_group]["delivered"] += 1
+                groupedStatuses[key]["delivered"] += 1
             if status.read:
-                groupedStatuses[bg_group]["read"] += 1
+                groupedStatuses[key]["read"] += 1
             if status.replied:
-                groupedStatuses[bg_group]["replied"] += 1
+                groupedStatuses[key]["replied"] += 1
             if status.failed:
-                groupedStatuses[bg_group]["failed"] += 1
+                groupedStatuses[key]["failed"] += 1
         
         return groupedStatuses
 
