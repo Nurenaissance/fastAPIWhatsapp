@@ -2,7 +2,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 
 class BroadcastGroupMember(BaseModel):
-    name: str
+    name: Optional[str] = None
     phone: int  
 
 class BroadcastGroupCreate(BaseModel):

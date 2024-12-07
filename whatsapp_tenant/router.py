@@ -177,3 +177,29 @@ def get_group(group_id: str, db: orm.Session = Depends(get_db)):
         return group
     except Exception as e:
         raise HTTPException(status_code=400, detail="Error fetching the broadcast group") from e
+
+@router.delete("/broadcast-groups/{group_id}/", response_model=dict)
+def delete_group(group_id: str, db: orm.Session = Depends(get_db), x_tenant_id: Optional[str] = Header(None)):
+    try:
+        # Fetch the group to check existence and tenant ownership
+        group = db.query(BroadcastGroups).filter(
+            BroadcastGroups.id == group_id, 
+            BroadcastGroups.tenant_id == x_tenant_id
+        ).first()
+        
+        if not group:
+            raise HTTPException(
+                status_code=404, 
+                detail="Broadcast group not found or does not belong to the tenant"
+            )
+        
+        # Delete the group
+        db.delete(group)
+        db.commit()
+        
+        return {"message": "Broadcast group deleted successfully"}
+    
+    except Exception as e:
+        db.rollback()
+        print("Error deleting group:", str(e))
+        raise HTTPException(status_code=400, detail="Error deleting the broadcast group") from e
