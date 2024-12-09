@@ -26,6 +26,39 @@ def read_contacts(request: Request, db: orm.Session = Depends(get_db)):
 
     return contacts
 
+
+@router.get("/contacts/{page_no}/")
+def get_limited_contacts(
+    page_no: int,
+    req: Request,
+    db: orm.Session = Depends(get_db),
+):
+    tenant_id = req.headers.get("X-Tenant-Id")
+    if not tenant_id:
+        raise HTTPException(status_code=400, detail="Tenant ID missing in headers")
+
+    # Verify that the tenant exists
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+
+    # Pagination logic
+    page_size = 50  # Number of contacts per page
+    offset = page_size * (page_no - 1)
+
+    # Fetch contacts with limit and offset
+    contacts = (
+        db.query(Contact)
+        .filter(Contact.tenant_id == tenant_id)
+        .offset(offset)
+        .limit(page_size)
+        .all()
+    )
+    # print(len(contacts))
+    return {"contacts": contacts, "page_no": page_no, "page_size": page_size}
+
+
+
 @router.patch("/contacts/")
 async def update_contact(request: Request, db: orm.Session = Depends(get_db)):
     body = await request.json()  # Parse JSON request body
