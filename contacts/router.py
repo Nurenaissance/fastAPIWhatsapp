@@ -54,9 +54,19 @@ def get_limited_contacts(
         .limit(page_size)
         .all()
     )
-    # print(len(contacts))
-    return {"contacts": contacts, "page_no": page_no, "page_size": page_size}
+   
+    total_contacts = db.query(Contact).filter(Contact.tenant_id == tenant_id).count()
 
+    # Calculate the total number of pages
+    total_pages = (total_contacts + page_size - 1) // page_size  # Round up
+
+    return {
+        "contacts": contacts,
+        "page_no": page_no,
+        "page_size": page_size,
+        "total_contacts": total_contacts,
+        "total_pages": total_pages,
+    }
 
 
 @router.patch("/contacts/")
