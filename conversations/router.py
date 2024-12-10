@@ -33,15 +33,74 @@ def decrypt_data(encrypted_data: bytes, key: bytes):
 
     return json.loads(decrypted_data.decode())
 
+# @router.get("/whatsapp_convo_get/{contact_id}")
+# async def view_conversation(
+#     contact_id: Optional[str],
+#     source: Optional[str] = Query(None),
+#     bpid: Optional[str] = Query(None),
+#     x_tenant_id: str = Header(...),
+#     db: Session = Depends(get_db)
+# ):
+#     try:
+#         # Fetch tenant and encryption key
+#         tenant = db.query(Tenant).filter(Tenant.id == x_tenant_id).one_or_none()
+#         if not tenant:
+#             raise HTTPException(status_code=404, detail="Tenant not found")
+#         encryption_key = tenant.key
+
+#         print(contact_id, bpid, source)
+
+#         # Query conversations for the contact_id
+#         conversations = (
+#             db.query(Conversation)
+#             .filter(
+#                 Conversation.contact_id == contact_id,
+#                 Conversation.business_phone_number_id == bpid,
+#                 Conversation.source == source,
+#             )
+#             .order_by(Conversation.date_time)
+#             .all()
+#         )
+        
+#         print("Conversations: ", conversations)
+
+#         # Format the conversations
+#         formatted_conversations = []
+#         for conv in conversations:
+#             text_to_append = conv.message_text
+#             encrypted_text = conv.encrypted_message_text
+
+#             if encrypted_text is not None:
+#                 decrypted_text = decrypt_data(bytes(encrypted_text), key=encryption_key)
+#                 print("Decrypted text: ", decrypted_text)
+#                 if decrypted_text:
+#                     decrypted_text = json.dumps(decrypted_text)
+#                     text_to_append = decrypted_text.strip('"') if decrypted_text.startswith('"') else decrypted_text
+
+#             formatted_conversations.append({
+#                 "text": text_to_append,
+#                 "sender": conv.sender,
+#             })
+
+#         return formatted_conversations
+
+#     except NoResultFound:
+#         raise HTTPException(status_code=404, detail="Data not found")
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Error while fetching data: {str(e)}")
+
+
 @router.get("/whatsapp_convo_get/{contact_id}")
 async def view_conversation(
     contact_id: Optional[str],
     source: Optional[str] = Query(None),
     bpid: Optional[str] = Query(None),
+    page_no: int = Query(1, ge=1),  # Ensure page_no is at least 1
     x_tenant_id: str = Header(...),
     db: Session = Depends(get_db)
 ):
     try:
+        page_size = 50
         # Fetch tenant and encryption key
         tenant = db.query(Tenant).filter(Tenant.id == x_tenant_id).one_or_none()
         if not tenant:
@@ -50,8 +109,11 @@ async def view_conversation(
 
         print(contact_id, bpid, source)
 
-        # Query conversations for the contact_id
-        conversations = (
+        # Pagination logic
+        offset = (page_no - 1) * page_size
+
+        # Query conversations for the contact_id with pagination
+        conversations_query = (
             db.query(Conversation)
             .filter(
                 Conversation.contact_id == contact_id,
@@ -59,8 +121,13 @@ async def view_conversation(
                 Conversation.source == source,
             )
             .order_by(Conversation.date_time)
-            .all()
         )
+        
+        # Get total conversations count for pagination metadata
+        total_conversations = conversations_query.count()
+
+        # Apply pagination (limit and offset)
+        conversations = conversations_query.offset(offset).limit(page_size).all()
         
         print("Conversations: ", conversations)
 
@@ -82,7 +149,16 @@ async def view_conversation(
                 "sender": conv.sender,
             })
 
-        return formatted_conversations
+        # Calculate total number of pages
+        total_pages = (total_conversations + page_size - 1) // page_size  # Round up
+
+        return {
+            "conversations": formatted_conversations,
+            "page_no": page_no,
+            "page_size": page_size,
+            "total_conversations": total_conversations,
+            "total_pages": total_pages,
+        }
 
     except NoResultFound:
         raise HTTPException(status_code=404, detail="Data not found")
