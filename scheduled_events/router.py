@@ -12,75 +12,62 @@ from collections import deque
 
 router = APIRouter()
 
+restart_event = threading.Event()
+
 def daily_task():
-    global newEvent
     print("TASK BOOTS UP")
     today = datetime.now().date()
     current_time = datetime.now().time()
     db: orm.Session = SessionLocal()
 
     try:
-        events_today = db.query(ScheduledEvent).filter(ScheduledEvent.date == today , ScheduledEvent.time > current_time).order_by(ScheduledEvent.time).all()
-        # print("Events Today: ", events_today)
+        events_today = db.query(ScheduledEvent).filter(
+            ScheduledEvent.date == today, ScheduledEvent.time > current_time
+        ).order_by(ScheduledEvent.time).all()
+
         if events_today:
-            events_stack = list(events_today)
-
             events_queue = deque(events_today)
+            print(f"{len(events_queue)} Events scheduled for today:")
 
-            print(f" {len(events_queue)} Events scheduled for today: ")
-            
             while events_queue:
                 event = events_queue.popleft()
-
                 print(f"Processing event '{event.type}' scheduled at {event.time}")
                 now = datetime.now()
-
                 event_time = datetime.combine(now.date(), event.time)
-                
-
-                # Calculate the time difference between now and event_time
                 time_diff = event_time - now
+                print("Time diff:", time_diff)
 
-                print("Time diff: ", time_diff)
+                time_to_wait = time_diff.total_seconds()
+                if time_to_wait < 0:
+                    continue
 
+                sleep_time = int(time_to_wait)
+                interval = 5  # Check every 5 seconds
+
+                for _ in range(0, sleep_time, interval):
+                    if restart_event.is_set():
+                        print("Restarting daily_task due to new event...")
+                        restart_event.clear()
+                        return daily_task()
+
+                    # print("Waiting...")
+                    datetime_time.sleep(interval)
+
+                # Make the request
                 try:
                     body = event.value
-
-                    headers = {
-                        'x-tenant-id': 'ai'
-                    }
-
-                    time_to_wait = time_diff.total_seconds()
-                    print(f"Waiting for {time_to_wait} seconds before sending the request...")
-
-                    if time_to_wait < 0:
-                        continue
-                    sleep_time = int(time_to_wait)
-                    interval = 5
-
-                    for _ in range(0, sleep_time, interval):
-                        # print("new loop")
-                        if newEvent:
-                            print("Rerunning daily_task")
-                            newEvent = False
-                            return daily_task()
-                        
-                        datetime_time.sleep(interval)  # Delay execution for `time_to_wait` seconds
-
-
-                    response = requests.post('https://whatsappbotserver.azurewebsites.net/send-template', json=body,headers=headers)
-                    # Check if the request was successful
+                    # headers = {'x-tenant-id': 'ai'}
+                    response = requests.post(
+                        'https://whatsappbotserver.azurewebsites.net/send-template',
+                        json=body
+                    )
                     if response.status_code == 200:
                         print(f"Event '{event.type}' processed successfully.")
                     else:
                         print(f"Failed to process event '{event.type}'. Status code: {response.status_code}")
 
-                except requests.Timeout:
-                    print(f"Request timed out for event '{event.type}'.")
-
                 except requests.RequestException as e:
                     print(f"Request failed for event '{event.type}': {e}")
-
         else:
             print("No events scheduled for today.")
 
@@ -91,15 +78,25 @@ schedule.every().day.at("00:00:00").do(daily_task)
 
 def run_scheduler():
     while True:
+        # print("running scheduler")
         schedule.run_pending()
-        datetime_time.sleep(60) 
+        # print("Sleeping for 10 seconds")
+        if restart_event.is_set():
+            print("Restarting daily_task in run scheduler")
+            restart_event.clear()
+            daily_task()
+        # print("sleeping..")
+        datetime_time.sleep(5)
 
         # daily_task()
 
 @router.on_event("startup")
 def startup_event():
+    print(schedule.get_jobs())
     scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
     scheduler_thread.start()
+    restart_event.set()
+
 
 @router.get("/")
 def read_root():
@@ -109,6 +106,7 @@ def read_root():
 @router.post("/scheduled-events/", response_model=ScheduledEventResponse)
 def create_scheduled_event(event: ScheduledEventCreate, x_tenant_id: Optional[str] = Header(None) ,db: orm.Session = Depends(get_db)):
     global newEvent
+        
     if not x_tenant_id:
         raise HTTPException(status_code=400, detail="Tenant ID is required in the headers.")
 
@@ -116,7 +114,8 @@ def create_scheduled_event(event: ScheduledEventCreate, x_tenant_id: Optional[st
     db.add(db_event)
     db.commit()
     db.refresh(db_event)
-    newEvent = True
+    restart_event.set()
+
     return db_event
 
 @router.get("/scheduled-events/{event_id}/", response_model=ScheduledEventResponse)
@@ -138,3 +137,5 @@ def delete_scheduled_event(event_id: int, db: orm.Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Scheduled event not found")
     db.delete(db_event)
     db.commit()
+
+    restart_event.set()
