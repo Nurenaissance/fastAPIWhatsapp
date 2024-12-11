@@ -4,7 +4,7 @@ from config.database import get_db, SessionLocal
 from .models import ScheduledEvent
 from typing import  List, Optional
 from .schema import ScheduledEventCreate, ScheduledEventResponse
-from datetime import datetime
+from datetime import datetime, timedelta
 import schedule, time as datetime_time, requests, threading
 from collections import deque
 
@@ -16,8 +16,13 @@ restart_event = threading.Event()
 
 def daily_task():
     print("TASK BOOTS UP")
-    today = datetime.now().date()
-    current_time = datetime.now().time()
+    now_utc = datetime.utcnow()
+
+    # Add 5 hours and 30 minutes for IST    
+    ist_offset = timedelta(hours=5, minutes=30)
+    now_ist = now_utc + ist_offset
+    today = now_ist.date()
+    current_time = now_ist.time()
     db: orm.Session = SessionLocal()
 
     try:
@@ -33,8 +38,8 @@ def daily_task():
                 event = events_queue.popleft()
                 print(f"Processing event '{event.type}' scheduled at {event.time}")
                 now = datetime.now()
-                event_time = datetime.combine(now.date(), event.time)
-                time_diff = event_time - now
+                event_time = datetime.combine(now_ist.date(), event.time)
+                time_diff = event_time - now_ist
                 print("Time diff:", time_diff)
 
                 time_to_wait = time_diff.total_seconds()
