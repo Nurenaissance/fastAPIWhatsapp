@@ -87,14 +87,16 @@ def get_limited_notifications(
         "total_pages": total_pages or None,
     }
 
-@router.delete("/notifications/{notification_id}")
+@router.delete("/notifications/{notification_id}", status_code=204)
 def delete_notification(
     notification_id: int,
     db: orm.Session = Depends(get_db)
 ):
     notification = db.query(Notifications).filter(Notifications.id == notification_id).first()
 
+    if notification is None:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    
     db.delete(notification)
     db.commit()
     
-    return True
