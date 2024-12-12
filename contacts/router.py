@@ -1,13 +1,15 @@
 from fastapi import APIRouter, Request, Depends ,HTTPException, responses
-from sqlalchemy import orm
+from sqlalchemy import orm, or_, and_
 from config.database import get_db
 from .models import Contact
 from models import Tenant
+from typing import Optional
+from datetime import datetime, timedelta
 
 router = APIRouter()
 
 
-@router.get("/contacts/")
+@router.get("/contacts")
 def read_contacts(request: Request, db: orm.Session = Depends(get_db)):
     # Extract tenant_id from request headers
     tenant_id = request.headers.get("X-Tenant-Id")
@@ -27,45 +29,66 @@ def read_contacts(request: Request, db: orm.Session = Depends(get_db)):
     return contacts
 
 
-@router.get("/contacts/{page_no}/")
+@router.get("/contacts/{page_no}")
 def get_limited_contacts(
     page_no: int,
     req: Request,
+    phone: Optional[str] = None,
     db: orm.Session = Depends(get_db),
 ):
+    
     tenant_id = req.headers.get("X-Tenant-Id")
     if not tenant_id:
         raise HTTPException(status_code=400, detail="Tenant ID missing in headers")
 
-    # Verify that the tenant exists
-    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant not found")
-
-    # Pagination logic
+    
     page_size = 50  # Number of contacts per page
     offset = page_size * (page_no - 1)
-
-    # Fetch contacts with limit and offset
-    contacts = (
-        db.query(Contact)
-        .filter(Contact.tenant_id == tenant_id)
-        .offset(offset)
-        .limit(page_size)
-        .all()
-    )
-   
+    
     total_contacts = db.query(Contact).filter(Contact.tenant_id == tenant_id).count()
 
-    # Calculate the total number of pages
     total_pages = (total_contacts + page_size - 1) // page_size  # Round up
+
+
+    if phone:
+        contact = db.query(Contact).filter(Contact.phone == phone).first()
+
+        greater_contacts = (
+            db.query(Contact)
+            .filter(Contact.tenant_id == tenant_id)
+            .filter(Contact.phone != phone)
+            .filter(Contact.createdOn > contact.createdOn)
+            .order_by(Contact.createdOn.asc())
+            .limit(25)
+            .all()
+        )
+        lesser_contacts = (
+            db.query(Contact)
+            .filter(Contact.tenant_id == tenant_id)
+            .filter(Contact.phone != phone)
+            .filter(Contact.createdOn < contact.createdOn)
+            .order_by(Contact.createdOn.desc())  # Sort descending to get the nearest dates
+            .limit(25)
+            .all()
+        )
+        contacts = greater_contacts + lesser_contacts
+
+
+    else:
+        contacts = (
+            db.query(Contact)
+            .filter(Contact.tenant_id == tenant_id)
+            .offset(offset)
+            .limit(page_size)
+            .all()
+        )
 
     return {
         "contacts": contacts,
-        "page_no": page_no,
-        "page_size": page_size,
-        "total_contacts": total_contacts,
-        "total_pages": total_pages,
+        "page_no": page_no or None,
+        "page_size": page_size or None,
+        "total_contacts": len(contacts),
+        "total_pages": total_pages or None,
     }
 
 
@@ -161,3 +184,53 @@ def delete_contact(contact_id: int, request: Request, db: orm.Session = Depends(
     db.commit()
 
     return {"message": "Contact deleted successfully"}
+
+@router.get("/contacts/filter")
+def get_filtered_contacts(
+    request: Request,
+    engagement_type: Optional[str] = None,
+    contact_type: Optional[str] = None,
+    db: orm.Session = Depends(get_db)
+    ):
+        
+    try:
+        tenant_id = request.headers.get("X-Tenant-Id")
+        if not tenant_id:
+            raise HTTPException(status_code=400, detail="Tenant ID missing in headers")
+
+        today = datetime.now()
+
+        if engagement_type == "high":
+            delivered = today - timedelta(days=3)
+            replied = today - timedelta(days=7)
+            contacts = db.query(Contact).filter(Contact.last_delivered >= delivered, Contact.last_replied >= replied, Contact.tenant_id == tenant_id).all()
+        
+        elif engagement_type == "medium":
+            seen = today - timedelta(days=30)
+            delivered = today - timedelta(days=14)
+            contacts = db.query(Contact).filter(Contact.last_seen >= seen, Contact.last_delivered >= delivered, Contact.tenant_id == tenant_id).all()
+        
+        elif engagement_type == "low":
+            created = today - timedelta(days=90)
+            not_seen = today - timedelta(days=60)
+            contacts = db.query(Contact).filter(Contact.createdOn >= created,  Contact.tenant_id == tenant_id, or_(Contact.last_seen <= not_seen, Contact.last_seen.is_(None))).all()
+        
+        elif contact_type == "fresh":
+            created = today - timedelta(days=14)
+            contacts = db.query(Contact).filter(Contact.createdOn >= created, Contact.tenant_id == tenant_id, Contact.last_delivered == None).all()
+        
+        elif contact_type == "dormant":
+            not_deli = today - timedelta(days=30)
+            contacts = db.query(Contact).filter(or_(Contact.last_delivered <= not_deli, Contact.last_delivered.is_(None))).all()
+
+        elif contact_type == "last_replied":
+            replied = today - timedelta(days=7)
+            contacts = db.query(Contact).filter(Contact.last_replied >= replied, Contact.tenant_id == tenant_id).order_by(Contact.last_replied.desc()).all()
+
+        # elif contact_type == "seen_not_replied":
+
+
+        return contacts
+    except Exception as e:
+        print("Exception Occured: ", str(e))
+        raise HTTPException(status_code=500, detail=f"An Error Occured: {str(e)}")

@@ -23,6 +23,6 @@ class Tenant(Base):
     broadcast_groups = relationship("BroadcastGroups", back_populates="tenant")
     scheduled_events = relationship("ScheduledEvent", back_populates="tenant")
     conversations = relationship("Conversation", back_populates="tenant")
-
+    notifications = relationship("Notifications", back_populates="tenant")
     def __repr__(self):
         return f"<Tenant(id={self.id}, organization={self.organization})>"
