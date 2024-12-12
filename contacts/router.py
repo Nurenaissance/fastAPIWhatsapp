@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Request, Depends ,HTTPException, responses
-from sqlalchemy import orm, or_, and_
+from sqlalchemy import orm, or_, and_, text
 from config.database import get_db
 from .models import Contact
 from models import Tenant
 from typing import Optional
 from datetime import datetime, timedelta
+import math
 
 router = APIRouter()
 
@@ -21,7 +22,7 @@ def read_contacts(request: Request, db: orm.Session = Depends(get_db)):
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
 
-    contacts = db.query(Contact).filter(Contact.tenant_id == tenant_id).all()
+    contacts = db.query(Contact).filter(Contact.tenant_id == tenant_id).order_by(Contact.id.asc()).all()
     
     if not contacts:
         raise HTTPException(status_code=404, detail="No contacts found for this tenant")
@@ -29,7 +30,7 @@ def read_contacts(request: Request, db: orm.Session = Depends(get_db)):
     return contacts
 
 
-@router.get("/contacts/{page_no}")
+@router.get("/contacts/{page_no}") 
 def get_limited_contacts(
     page_no: int,
     req: Request,
@@ -41,47 +42,41 @@ def get_limited_contacts(
     if not tenant_id:
         raise HTTPException(status_code=400, detail="Tenant ID missing in headers")
 
-    
+    if phone:
+        sql_query = text("""
+            SELECT *
+            FROM (
+                SELECT 
+                    ROW_NUMBER() OVER (ORDER BY id) AS row_num, *
+                FROM 
+                    contacts_contact
+                WHERE tenant_id = :tenant
+            ) AS subquery_result
+            WHERE 
+                phone = :phone;
+        """)
+        
+        # Execute the raw SQL query
+        result = db.execute(sql_query, {"phone": phone, "tenant": tenant_id}).fetchone()
+        # print("Result ", result)
+        page_no = math.ceil(result[0] / 50 )
+    # print("Page ", page_no)
     page_size = 50  # Number of contacts per page
     offset = page_size * (page_no - 1)
     
     total_contacts = db.query(Contact).filter(Contact.tenant_id == tenant_id).count()
 
-    total_pages = (total_contacts + page_size - 1) // page_size  # Round up
+    total_pages = (total_contacts + page_size - 1) // page_size 
 
 
-    if phone:
-        contact = db.query(Contact).filter(Contact.phone == phone).first()
-
-        greater_contacts = (
-            db.query(Contact)
-            .filter(Contact.tenant_id == tenant_id)
-            .filter(Contact.phone != phone)
-            .filter(Contact.createdOn > contact.createdOn)
-            .order_by(Contact.createdOn.asc())
-            .limit(25)
-            .all()
-        )
-        lesser_contacts = (
-            db.query(Contact)
-            .filter(Contact.tenant_id == tenant_id)
-            .filter(Contact.phone != phone)
-            .filter(Contact.createdOn < contact.createdOn)
-            .order_by(Contact.createdOn.desc())  # Sort descending to get the nearest dates
-            .limit(25)
-            .all()
-        )
-        contacts = greater_contacts + lesser_contacts
-
-
-    else:
-        contacts = (
-            db.query(Contact)
-            .filter(Contact.tenant_id == tenant_id)
-            .offset(offset)
-            .limit(page_size)
-            .all()
-        )
+    contacts = (
+        db.query(Contact)
+        .filter(Contact.tenant_id == tenant_id)
+        .order_by(Contact.id.asc())
+        .offset(offset)
+        .limit(page_size)
+        .all()
+    )
 
     return {
         "contacts": contacts,
