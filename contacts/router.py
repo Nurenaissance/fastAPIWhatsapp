@@ -9,7 +9,6 @@ import math
 
 router = APIRouter()
 
-
 @router.get("/contacts")
 def read_contacts(request: Request, db: orm.Session = Depends(get_db)):
     # Extract tenant_id from request headers
@@ -17,10 +16,6 @@ def read_contacts(request: Request, db: orm.Session = Depends(get_db)):
     if not tenant_id:
         raise HTTPException(status_code=400, detail="Tenant ID missing in headers")
 
-    # Verify that the tenant exists
-    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant not found")
 
     contacts = db.query(Contact).filter(Contact.tenant_id == tenant_id).order_by(Contact.id.asc()).all()
     
@@ -28,7 +23,6 @@ def read_contacts(request: Request, db: orm.Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="No contacts found for this tenant")
 
     return contacts
-
 
 @router.get("/contacts/{page_no}") 
 def get_limited_contacts(
@@ -56,8 +50,10 @@ def get_limited_contacts(
                 phone = :phone;
         """)
         
-        # Execute the raw SQL query
         result = db.execute(sql_query, {"phone": phone, "tenant": tenant_id}).fetchone()
+
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"Contact not found with phone {phone}")
         # print("Result ", result)
         page_no = math.ceil(result[0] / 50 )
     # print("Page ", page_no)
@@ -85,7 +81,6 @@ def get_limited_contacts(
         "total_contacts": len(contacts),
         "total_pages": total_pages or None,
     }
-
 
 @router.patch("/contacts/")
 async def update_contact(request: Request, db: orm.Session = Depends(get_db)):
@@ -129,10 +124,6 @@ async def delete_contacts(request: Request, db: orm.Session = Depends(get_db)):
     if not tenant_id:
         raise HTTPException(status_code=400, detail="Tenant ID missing in headers")
 
-    # Verify that the tenant exists
-    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant not found")
 
     for contact_id in contact_ids:
         try:
@@ -163,11 +154,6 @@ def delete_contact(contact_id: int, request: Request, db: orm.Session = Depends(
     tenant_id = request.headers.get("X-Tenant-Id")
     if not tenant_id:
         raise HTTPException(status_code=400, detail="Tenant ID missing in headers")
-
-    # Verify that the tenant exists
-    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant not found")
 
     # Fetch the contact by ID and tenant ID
     contact = db.query(Contact).filter(Contact.id == contact_id, Contact.tenant_id == tenant_id).first()
