@@ -59,9 +59,9 @@ def get_status(request: Request, db: orm.Session = Depends(get_db)):
         for status in statuses:
             bg_group = status.broadcast_group
             template_name = status.template_name
-            contact = db.query(Contact).filter(Contact.phone == status.user_phone_number)
+
             if bg_group == None:
-                key = template_name
+                key = template_name 
             else:
                 key = bg_group
 
@@ -79,6 +79,15 @@ def get_status(request: Request, db: orm.Session = Depends(get_db)):
                 groupedStatuses[key]["replied"] += 1
             if status.failed:
                 groupedStatuses[key]["failed"] += 1
+
+        contacts = db.query(Contact).filter(Contact.tenant_id == tenant_id).filter(Contact.template_key != None).order_by(Contact.id.asc()).all()
+        for contact in contacts:
+            if contact.last_replied > contact.last_delivered:
+
+                key = contact.template_key
+
+                groupedStatuses[key]["replied"] += 1
+                
         
         return groupedStatuses
 

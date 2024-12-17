@@ -17,8 +17,7 @@ class Contact(Base):
     isActive = Column(Boolean, default=False, nullable=True)
     tenant_id = Column(Integer, ForeignKey("tenant_tenant.id"), nullable=True)
     tenant = relationship("Tenant", back_populates="contacts")  # Corrected back_populates
-    bg_id = Column(String(50), nullable=True)
-    bg_name = Column(String(50), nullable=True)
+    template_key = Column(String(50), nullable=True)
     last_seen = Column(DateTime, default=datetime.utcnow, nullable=True)
     last_delivered = Column(DateTime, default=datetime.utcnow, nullable=True)
     last_replied = Column(DateTime, default=datetime.utcnow, nullable=True)
@@ -26,3 +25,4 @@ class Contact(Base):
 
     def __repr__(self):
         return f"<Contact(name={self.name})>"
+    
