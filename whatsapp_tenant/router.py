@@ -7,7 +7,7 @@ from typing import Optional
 from .schema import BroadcastGroupResponse, BroadcastGroupCreate
 from .crud import create_broadcast_group, get_broadcast_group, get_all_broadcast_groups
 from typing import List, Optional
-
+from contacts.models import Contact
 router = APIRouter()
 
 @router.get("/whatsapp_tenant/")
@@ -54,11 +54,12 @@ def get_status(request: Request, db: orm.Session = Depends(get_db)):
         # whatsapp_data = db.query(WhatsappTenantData).filter(WhatsappTenantData.tenant_id == tenant_id).all()
 
         statuses = db.query(MessageStatus).filter(MessageStatus.tenant_id == tenant_id)
-        
+
         groupedStatuses = {}
         for status in statuses:
             bg_group = status.broadcast_group
             template_name = status.template_name
+            contact = db.query(Contact).filter(Contact.phone == status.user_phone_number)
             if bg_group == None:
                 key = template_name
             else:
@@ -74,6 +75,7 @@ def get_status(request: Request, db: orm.Session = Depends(get_db)):
             if status.read:
                 groupedStatuses[key]["read"] += 1
             if status.replied:
+
                 groupedStatuses[key]["replied"] += 1
             if status.failed:
                 groupedStatuses[key]["failed"] += 1

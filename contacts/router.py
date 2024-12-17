@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Depends ,HTTPException, responses
-from sqlalchemy import orm, or_, and_, text
+from sqlalchemy import orm, or_, and_, text, nulls_first, nulls_last
 from config.database import get_db
 from .models import Contact
 from models import Tenant
@@ -26,9 +26,11 @@ def read_contacts(request: Request, db: orm.Session = Depends(get_db)):
 
 @router.get("/contacts/{page_no}") 
 def get_limited_contacts(
-    page_no: int,
     req: Request,
+    page_no: int = 1,
     phone: Optional[str] = None,
+    order_by: Optional[str] = "id",
+    sort_by: Optional[str] = "desc",
     db: orm.Session = Depends(get_db),
 ):
     
@@ -56,7 +58,7 @@ def get_limited_contacts(
             raise HTTPException(status_code=404, detail=f"Contact not found with phone {phone}")
         # print("Result ", result)
         page_no = math.ceil(result[0] / 50 )
-    # print("Page ", page_no)
+        
     page_size = 50  # Number of contacts per page
     offset = page_size * (page_no - 1)
     
@@ -64,11 +66,11 @@ def get_limited_contacts(
 
     total_pages = (total_contacts + page_size - 1) // page_size 
 
-
+    order_by_clause = nulls_last(getattr(Contact, order_by).desc()) if sort_by == "desc" else nulls_last(getattr(Contact, order_by).asc())
     contacts = (
         db.query(Contact)
         .filter(Contact.tenant_id == tenant_id)
-        .order_by(Contact.id.asc())
+        .order_by(order_by_clause)
         .offset(offset)
         .limit(page_size)
         .all()
@@ -171,6 +173,7 @@ def get_filtered_contacts(
     request: Request,
     engagement_type: Optional[str] = None,
     contact_type: Optional[str] = None,
+    sort_by: Optional[str] = None,
     db: orm.Session = Depends(get_db)
     ):
         
