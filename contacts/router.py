@@ -30,7 +30,7 @@ def get_limited_contacts(
     page_no: int = 1,
     phone: Optional[str] = None,
     order_by: Optional[str] = "id",
-    sort_by: Optional[str] = "desc",
+    sort_by: Optional[str] = "asc",
     db: orm.Session = Depends(get_db),
 ):
     
