@@ -8,6 +8,7 @@ from .schema import BroadcastGroupResponse, BroadcastGroupCreate
 from .crud import create_broadcast_group, get_broadcast_group, get_all_broadcast_groups
 from typing import List, Optional
 from contacts.models import Contact
+from datetime import timedelta
 router = APIRouter()
 
 @router.get("/whatsapp_tenant/")
@@ -80,14 +81,22 @@ def get_status(request: Request, db: orm.Session = Depends(get_db)):
             if status.failed:
                 groupedStatuses[key]["failed"] += 1
 
-        contacts = db.query(Contact).filter(Contact.tenant_id == tenant_id).filter(Contact.template_key != None).order_by(Contact.id.asc()).all()
+        contacts = db.query(Contact).filter(Contact.tenant_id == tenant_id).order_by(Contact.id.asc()).all()
         for contact in contacts:
-            if contact.last_replied > contact.last_delivered:
+            
+            key = contact.template_key or "Untracked"
+            delivered = contact.last_delivered
+            replied = contact.last_replied
 
-                key = contact.template_key
+            if delivered is None or replied is None:
+                continue
 
+            if key not in groupedStatuses:
+                groupedStatuses[key] = { "name": "No Name", "sent": 0,"delivered": 0,"read": 0,"replied": 0,"failed": 0, "template_name": "Untracked"}
+            
+            time_diff = contact.last_delivered - contact.last_replied
+            if time_diff < timedelta(minutes=1):
                 groupedStatuses[key]["replied"] += 1
-                
         
         return groupedStatuses
 
