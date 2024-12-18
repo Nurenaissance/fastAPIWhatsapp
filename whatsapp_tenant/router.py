@@ -92,7 +92,7 @@ def get_status(request: Request, db: orm.Session = Depends(get_db)):
                 continue
 
             if key not in groupedStatuses:
-                groupedStatuses[key] = { "name": "No Name", "sent": 0,"delivered": 0,"read": 0,"replied": 0,"failed": 0, "template_name": "Untracked"}
+                groupedStatuses[key] = { "name": "Group B", "sent": 0,"delivered": 0,"read": 0,"replied": 0,"failed": 0, "template_name": "Untracked"}
             
             time_diff = contact.last_delivered - contact.last_replied
             if time_diff < timedelta(minutes=1):
