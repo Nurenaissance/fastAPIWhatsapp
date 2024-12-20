@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request, Depends ,HTTPException, Header
 from sqlalchemy import orm
 from config.database import get_db
-from .models import WhatsappTenantData, MessageStatus, BroadcastGroups
+from .models import WhatsappTenantData, MessageStatus, BroadcastGroups, MessageStatistics
 from product.models import Product
 from typing import Optional
 from .schema import BroadcastGroupResponse, BroadcastGroupCreate
@@ -47,13 +47,12 @@ def get_whatsapp_tenant_data(x_tenant_id: Optional[str] = Header(None), bpid: Op
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
     
 
+from sqlalchemy.exc import IntegrityError
 
-@router.get("/get-status/")
-def get_status(request: Request, db: orm.Session = Depends(get_db)):
+@router.get("/refresh-status/")
+def refresh_status(request: Request, db: orm.Session = Depends(get_db)):
     try:
         tenant_id = request.headers.get("X-Tenant-Id")
-        # whatsapp_data = db.query(WhatsappTenantData).filter(WhatsappTenantData.tenant_id == tenant_id).all()
-
         statuses = db.query(MessageStatus).filter(MessageStatus.tenant_id == tenant_id)
 
         groupedStatuses = {}
@@ -61,13 +60,18 @@ def get_status(request: Request, db: orm.Session = Depends(get_db)):
             bg_group = status.broadcast_group
             template_name = status.template_name
 
-            if bg_group == None:
-                key = template_name 
-            else:
-                key = bg_group
+            key = bg_group if bg_group else template_name
 
             if key not in groupedStatuses:
-                groupedStatuses[key] = { "name": status.broadcast_group_name or None, "sent": 0,"delivered": 0,"read": 0,"replied": 0,"failed": 0, "template_name": template_name}
+                groupedStatuses[key] = {
+                    "name": status.broadcast_group_name or None,
+                    "sent": 0,
+                    "delivered": 0,
+                    "read": 0,
+                    "replied": 0,
+                    "failed": 0,
+                    "template_name": template_name
+                }
             
             if status.sent:
                 groupedStatuses[key]["sent"] += 1
@@ -76,14 +80,12 @@ def get_status(request: Request, db: orm.Session = Depends(get_db)):
             if status.read:
                 groupedStatuses[key]["read"] += 1
             if status.replied:
-
                 groupedStatuses[key]["replied"] += 1
             if status.failed:
                 groupedStatuses[key]["failed"] += 1
 
         contacts = db.query(Contact).filter(Contact.tenant_id == tenant_id).order_by(Contact.id.asc()).all()
         for contact in contacts:
-            
             key = contact.template_key or "Untracked"
             delivered = contact.last_delivered
             replied = contact.last_replied
@@ -92,16 +94,105 @@ def get_status(request: Request, db: orm.Session = Depends(get_db)):
                 continue
 
             if key not in groupedStatuses:
-                groupedStatuses[key] = { "name": "Group B", "sent": 0,"delivered": 0,"read": 0,"replied": 0,"failed": 0, "template_name": "Untracked"}
+                groupedStatuses[key] = {
+                    "name": "Group B",
+                    "sent": 0,
+                    "delivered": 0,
+                    "read": 0,
+                    "replied": 0,
+                    "failed": 0,
+                    "template_name": "Untracked"
+                }
             
             time_diff = contact.last_delivered - contact.last_replied
             if time_diff < timedelta(minutes=1):
                 groupedStatuses[key]["replied"] += 1
-        
-        return groupedStatuses
 
+        # Add or update records in the MessageStatistics table
+        for key, status_data in groupedStatuses.items():
+            existing_record = db.query(MessageStatistics).filter(
+                MessageStatistics.tenant_id == tenant_id,
+                MessageStatistics.record_key == key
+            ).first()
+
+            if existing_record:
+                # Update the existing record
+                existing_record.name = status_data["name"]
+                existing_record.sent = status_data["sent"]
+                existing_record.delivered = status_data["delivered"]
+                existing_record.read = status_data["read"]
+                existing_record.replied = status_data["replied"]
+                existing_record.failed = status_data["failed"]
+                existing_record.template_name = status_data["template_name"]
+            else:
+                # Create a new record
+                new_record = MessageStatistics(
+                    tenant_id=tenant_id,
+                    record_key=key,
+                    name=status_data["name"],
+                    sent=status_data["sent"],
+                    delivered=status_data["delivered"],
+                    read=status_data["read"],
+                    replied=status_data["replied"],
+                    failed=status_data["failed"],
+                    template_name=status_data["template_name"]
+                )
+                db.add(new_record)
+
+        # Commit changes to the database
+        db.commit()
+        return {"message": "Message statistics updated successfully"}
+
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Database integrity error")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}",) 
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
+
+
+@router.get("/get-status/")
+def get_status( request: Request, db: orm.Session = Depends(get_db)):
+    """
+    Retrieve all records from the message_statistics table without a response model.
+    """
+    try:
+        # Fetch all records
+        tenant_id = request.headers.get("X-Tenant-Id")
+        # whatsapp_data = db.query(WhatsappTenantData).filter(WhatsappTenantData.tenant_id == tenant_id).all()
+
+        records = db.query(MessageStatistics).filter(MessageStatistics.tenant_id == tenant_id)
+
+
+        # Convert SQLAlchemy objects into dictionaries for JSON serialization
+        result = [
+            {
+                "id": record.id,
+                "record_key": record.record_key,
+                "name": record.name,
+                "sent": record.sent,
+                "delivered": record.delivered,
+                "read": record.read,
+                "replied": record.replied,
+                "failed": record.failed,
+                "template_name": record.template_name,
+            }
+            for record in records
+        ]
+        return transform_data(result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving data: {str(e)}")
+
+def transform_data(input_list):
+    
+    output = {}
+    for item in input_list:
+        
+        key = item.pop("record_key")
+        item.pop("id")
+        output[key] = item
+
+    return output
 
 @router.post("/set-status/")
 async def set_status(request: Request, db: orm.Session =Depends(get_db)):

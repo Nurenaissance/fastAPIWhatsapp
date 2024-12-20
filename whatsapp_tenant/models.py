@@ -52,6 +52,24 @@ class BroadcastGroups(Base):
     name = Column(String(100), nullable=False)
     id = Column(String(50), primary_key=True)
     members = Column(JSON)
-    tenant_id = Column(String(50), ForeignKey("tenant_tenant.id"), nullable=True)  # Adjusted ForeignKey reference
+    tenant_id = Column(String(50), ForeignKey("tenant_tenant.id"), nullable=True)
+    
 
     tenant = relationship("Tenant", back_populates="broadcast_groups")
+
+class MessageStatistics(Base):
+    __tablename__ = "message_statistics"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    record_key = Column(String, unique=True, nullable=False)
+    name = Column(String, nullable=True)
+    sent = Column(Integer, default=0)
+    delivered = Column(Integer, default=0)
+    read = Column(Integer, default=0)
+    replied = Column(Integer, default=0)
+    failed = Column(Integer, default=0)
+    template_name = Column(String, nullable=True)    
+    tenant_id = Column(String(50), ForeignKey("tenant_tenant.id"), nullable=True)
+    
+
+    tenant = relationship("Tenant", back_populates="message_statistics")
