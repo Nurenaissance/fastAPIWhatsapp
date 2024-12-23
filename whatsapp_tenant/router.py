@@ -52,15 +52,22 @@ from sqlalchemy.exc import IntegrityError
 @router.get("/refresh-status/")
 def refresh_status(request: Request, db: orm.Session = Depends(get_db)):
     try:
+        # Step 1: Retrieve tenant_id from headers
         tenant_id = request.headers.get("X-Tenant-Id")
-        statuses = db.query(MessageStatus).filter(MessageStatus.tenant_id == tenant_id)
+        # print(f"Tenant ID: {tenant_id}")
+        if not tenant_id:
+            raise HTTPException(status_code=400, detail="Missing Tenant ID in headers")
+
+        # Step 2: Query MessageStatus
+        statuses = db.query(MessageStatus).filter(MessageStatus.tenant_id == tenant_id).all()
+        # print(f"Fetched {len(statuses)} statuses from MessageStatus table")
 
         groupedStatuses = {}
         for status in statuses:
             bg_group = status.broadcast_group
             template_name = status.template_name
-
             key = bg_group if bg_group else template_name
+            # print(f"Processing status with key: {key}, broadcast group: {bg_group}, template name: {template_name}")
 
             if key not in groupedStatuses:
                 groupedStatuses[key] = {
@@ -72,7 +79,7 @@ def refresh_status(request: Request, db: orm.Session = Depends(get_db)):
                     "failed": 0,
                     "template_name": template_name
                 }
-            
+
             if status.sent:
                 groupedStatuses[key]["sent"] += 1
             if status.delivered:
@@ -84,13 +91,17 @@ def refresh_status(request: Request, db: orm.Session = Depends(get_db)):
             if status.failed:
                 groupedStatuses[key]["failed"] += 1
 
+        # Step 3: Query Contacts
         contacts = db.query(Contact).filter(Contact.tenant_id == tenant_id).order_by(Contact.id.asc()).all()
+        # print(f"Fetched {len(contacts)} contacts from Contact table")
+
         for contact in contacts:
-            key = contact.template_key or "Untracked"
+            key = contact.template_key or f"Untracked_{tenant_id}"
             delivered = contact.last_delivered
             replied = contact.last_replied
 
             if delivered is None or replied is None:
+                # print(f"Skipping contact ID {contact.id} due to missing delivered/replied timestamps")
                 continue
 
             if key not in groupedStatuses:
@@ -103,19 +114,23 @@ def refresh_status(request: Request, db: orm.Session = Depends(get_db)):
                     "failed": 0,
                     "template_name": "Untracked"
                 }
-            
+
             time_diff = contact.last_delivered - contact.last_replied
             if time_diff < timedelta(minutes=1):
                 groupedStatuses[key]["replied"] += 1
 
-        # Add or update records in the MessageStatistics table
+        # Step 4: Add or update records in MessageStatistics table
+        # print("Grouped Statuses before updating MessageStatistics:", groupedStatuses)
+
         for key, status_data in groupedStatuses.items():
+            # print(f"Processing grouped status for key: {key}, data: {status_data}")
             existing_record = db.query(MessageStatistics).filter(
                 MessageStatistics.tenant_id == tenant_id,
                 MessageStatistics.record_key == key
             ).first()
 
             if existing_record:
+                # print(f"Updating existing record for key: {key}")
                 # Update the existing record
                 existing_record.name = status_data["name"]
                 existing_record.sent = status_data["sent"]
@@ -125,6 +140,7 @@ def refresh_status(request: Request, db: orm.Session = Depends(get_db)):
                 existing_record.failed = status_data["failed"]
                 existing_record.template_name = status_data["template_name"]
             else:
+                # print(f"Creating new record for key: {key}")
                 # Create a new record
                 new_record = MessageStatistics(
                     tenant_id=tenant_id,
@@ -141,13 +157,16 @@ def refresh_status(request: Request, db: orm.Session = Depends(get_db)):
 
         # Commit changes to the database
         db.commit()
+        # print("Database commit successful")
         return {"message": "Message statistics updated successfully"}
 
-    except IntegrityError:
+    except IntegrityError as e:
         db.rollback()
-        raise HTTPException(status_code=400, detail="Database integrity error")
+        print(f"IntegrityError: {e}")
+        raise HTTPException(status_code=400, detail=f"Database integrity error: {str(e)}")
     except Exception as e:
         db.rollback()
+        print(f"Unexpected error: {e}")
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
 
 
