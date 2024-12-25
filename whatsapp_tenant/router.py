@@ -21,10 +21,10 @@ def get_whatsapp_tenant_data(x_tenant_id: Optional[str] = Header(None), bpid: Op
         if x_tenant_id:
             if x_tenant_id == "demo":
                 x_tenant_id = 'ai'
-            whatsapp_data = db.query(WhatsappTenantData).filter(WhatsappTenantData.tenant_id == x_tenant_id).all()
+            whatsapp_data = db.query(WhatsappTenantData).filter(WhatsappTenantData.tenant_id == x_tenant_id).order_by(WhatsappTenantData.id.asc()).all()
             if not whatsapp_data:
                 raise HTTPException(status_code=404, detail="WhatsappTenantData not found for tenant")
-            whatsapp_data_json = whatsapp_data
+
             tenant_id = x_tenant_id
         elif bpid:
             whatsapp_data = db.query(WhatsappTenantData).filter(WhatsappTenantData.business_phone_number_id == bpid).all()
@@ -32,16 +32,17 @@ def get_whatsapp_tenant_data(x_tenant_id: Optional[str] = Header(None), bpid: Op
                 raise HTTPException(status_code=404, detail="WhatsappTenantData not found for bpid")
             tenant_id = whatsapp_data[0].tenant_id
             print("Tenant:", tenant_id)
-            whatsapp_data_json = whatsapp_data
+            
         else:
             raise HTTPException(status_code=400, detail="Either Tenant-ID or BPID header must be provided")
 
         catalog_data = db.query(Product).filter(Product.tenant_id == tenant_id).all()
         # print("catalog: ", catalog_data)
-        catalog_data_json = catalog_data
-
-        return {"whatsapp_data": whatsapp_data, "catalog_data": catalog_data}
-
+        return {
+            "whatsapp_data": whatsapp_data,
+            "catalog_data": catalog_data
+        }
+    
     except Exception as e:
         print("Error occurred with tenant:", x_tenant_id)
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
@@ -104,6 +105,7 @@ def refresh_status(request: Request, db: orm.Session = Depends(get_db)):
                 # print(f"Skipping contact ID {contact.id} due to missing delivered/replied timestamps")
                 continue
 
+            # print(f"Processing Contact {contact.phone} for key: " ,key)
             if key not in groupedStatuses:
                 groupedStatuses[key] = {
                     "name": "Group B",

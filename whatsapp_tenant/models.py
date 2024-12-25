@@ -7,7 +7,7 @@ from datetime import datetime
 class WhatsappTenantData(Base):
     __tablename__ = "whatsapp_chat_whatsapptenantdata"
 
-    business_phone_number_id = Column(BigInteger, primary_key=True)
+    business_phone_number_id = Column(BigInteger)
     flow_data = Column(JSON, nullable=True)
     adj_list = Column(JSON, nullable=True)
     access_token = Column(String(300), nullable=False)
@@ -19,6 +19,10 @@ class WhatsappTenantData(Base):
     flow_name = Column(String(200), nullable=True)
     tenant_id = Column(String(50), ForeignKey("tenant_tenant.id"), nullable=False)
     spreadsheet_link = Column(String, nullable=True)  # Use String for URL
+    id = Column(Integer, primary_key=True)
+    language = Column(String(50))
+    introductory_msg = Column(JSON, nullable=True)
+    multilingual =  Column(Boolean, default=False)
 
     tenant = relationship("Tenant", back_populates="whatsapp_chat_whatsapp_data")
 
