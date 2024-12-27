@@ -8,14 +8,12 @@ from datetime import datetime
 class Product(Base):
     __tablename__ = "shop_products"
 
-    id = Column(Integer, primary_key=True)
-    product_id = Column(String(255), unique=True, nullable=False)
-    title = Column(String(255), unique=True, nullable=False)
+    id = Column(String(255), unique=True, nullable=False, primary_key=True)
+    title = Column(String(255) ,nullable=False)
     description = Column(Text, nullable=False)
     link = Column(String, nullable=False)
-    image_link = Column(String, unique=True, nullable=False)
+    image_link = Column(String ,nullable=False)
     
-    # Enums as String, or you can define Enum types in SQLAlchemy (optional)
     condition = Column(String(255), default="new", nullable=False)
     availability = Column(String(255), default="in_stock", nullable=False)
     
@@ -26,9 +24,9 @@ class Product(Base):
     catalog_id = Column(BigInteger, nullable=True)
     status = Column(String(50), default="active", nullable=False)
     
-    tenant_id = Column(String(50), ForeignKey("tenant_tenant.id"), nullable=True)  # Adjusted ForeignKey reference
+    tenant_id = Column(String(50), ForeignKey("tenant_tenant.id"), nullable=True) 
     
     tenant = relationship("Tenant", back_populates="products")
 
     def __repr__(self):
-        return f"<Product(title={self.title}, product_id={self.product_id})>"
+        return f"<Product(title={self.title})>"
