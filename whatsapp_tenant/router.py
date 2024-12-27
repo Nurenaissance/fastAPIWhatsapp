@@ -46,7 +46,41 @@ def get_whatsapp_tenant_data(x_tenant_id: Optional[str] = Header(None), bpid: Op
     except Exception as e:
         print("Error occurred with tenant:", x_tenant_id)
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
-    
+
+@router.patch("/whatsapp_tenant/")
+async def update_whatsapp_tenant_data(
+    req: Request, 
+    x_tenant_id: Optional[str] = Header(None), 
+    db: orm.Session = Depends(get_db)
+):
+    try:
+        if not x_tenant_id:
+            raise HTTPException(status_code=400, detail="Tenant-ID header must be provided")
+        
+        
+        # Retrieve the WhatsappTenantData for the specified tenant
+        whatsapp_data = db.query(WhatsappTenantData).filter(WhatsappTenantData.tenant_id == x_tenant_id).all()
+        
+        if not whatsapp_data:
+            raise HTTPException(status_code=404, detail="WhatsappTenantData not found for the given tenant")
+
+        body = await req.json()
+
+        # Update each field in the data payload
+        for record in whatsapp_data:
+            for key, value in body.items():
+                if hasattr(record, key):  # Ensure the field exists
+                    setattr(record, key, value)
+
+        db.commit()  # Commit the changes to the database
+        db.refresh(whatsapp_data[0])  # Refresh the first record to return updated data
+
+        return {"message": "WhatsappTenantData updated successfully", "updated_data": [record for record in whatsapp_data]}
+
+    except Exception as e:
+        print(f"Error occurred while updating tenant data for {x_tenant_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+
 
 from sqlalchemy.exc import IntegrityError
 
