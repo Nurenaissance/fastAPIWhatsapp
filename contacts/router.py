@@ -235,7 +235,7 @@ def delete_contact(contact_id: int, request: Request, db: orm.Session = Depends(
 
     return {"message": "Contact deleted successfully"}
 
-@router.get("/contacts")
+@router.get("/contact")
 def get_contact(phone: str, request: Request, db: orm.Session = Depends(get_db)):
     # Extract tenant_id from request headers
     tenant_id = request.headers.get("X-Tenant-Id")
