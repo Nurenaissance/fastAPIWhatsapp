@@ -21,6 +21,7 @@ class Contact(Base):
     last_seen = Column(DateTime, default=datetime.utcnow, nullable=True)
     last_delivered = Column(DateTime, default=datetime.utcnow, nullable=True)
     last_replied = Column(DateTime, default=datetime.utcnow, nullable=True)
+    customField = Column(JSON, nullable=True)
 
 
     def __repr__(self):
