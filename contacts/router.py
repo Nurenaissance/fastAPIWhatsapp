@@ -2,7 +2,7 @@ from fastapi import APIRouter, Request, Depends ,HTTPException, responses
 from sqlalchemy import orm, or_, and_, text, nulls_first, nulls_last
 from config.database import get_db
 from .models import Contact
-from models import Tenant
+from whatsapp_tenant.models import WhatsappTenantData
 from typing import Optional
 from datetime import datetime, timedelta
 import math
@@ -239,10 +239,17 @@ def delete_contact(contact_id: int, request: Request, db: orm.Session = Depends(
 def get_contact(phone: str, request: Request, db: orm.Session = Depends(get_db)):
     # Extract tenant_id from request headers
     tenant_id = request.headers.get("X-Tenant-Id")
-    if not tenant_id:
-        raise HTTPException(status_code=400, detail="Tenant ID missing in headers")
+    
+    bpid = request.headers.get('bpid')
+    print(tenant_id)
+    print(bpid)
+    if not tenant_id and not bpid:
+        raise HTTPException(status_code=400, detail="Atleast one of tenant id or bpid must be provided")
+    
+    if(bpid):
+        bpid_data = db.query(WhatsappTenantData).filter(WhatsappTenantData.business_phone_number_id == bpid).first()
+        tenant_id = bpid_data.tenant_id
 
-    # Fetch the contact by phone and tenant ID
     contact = db.query(Contact).filter(Contact.phone == phone, Contact.tenant_id == tenant_id).first()
     if not contact:
         raise HTTPException(status_code=404, detail="Contact not found for this tenant")
