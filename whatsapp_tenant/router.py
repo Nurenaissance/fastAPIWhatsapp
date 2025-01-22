@@ -16,7 +16,6 @@ def get_whatsapp_tenant_data(x_tenant_id: Optional[str] = Header(None), bpid: Op
     try:
         # Retrieve WhatsappTenantData for the specified tenant
         print("TENANT AND BPID:", x_tenant_id, bpid)
-        whatsapp_data_json = {}
 
         if x_tenant_id:
             if x_tenant_id == "demo":
@@ -24,23 +23,22 @@ def get_whatsapp_tenant_data(x_tenant_id: Optional[str] = Header(None), bpid: Op
             whatsapp_data = db.query(WhatsappTenantData).filter(WhatsappTenantData.tenant_id == x_tenant_id).order_by(WhatsappTenantData.id.asc()).all()
             if not whatsapp_data:
                 raise HTTPException(status_code=404, detail="WhatsappTenantData not found for tenant")
-
             tenant_id = x_tenant_id
         elif bpid:
             whatsapp_data = db.query(WhatsappTenantData).filter(WhatsappTenantData.business_phone_number_id == bpid).all()
             if not whatsapp_data:
                 raise HTTPException(status_code=404, detail="WhatsappTenantData not found for bpid")
             tenant_id = whatsapp_data[0].tenant_id
-            print("Tenant:", tenant_id)
+            # print("Tenant:", tenant_id)
             
         else:
             raise HTTPException(status_code=400, detail="Either Tenant-ID or BPID header must be provided")
 
-        catalog_data = db.query(Product).filter(Product.tenant_id == tenant_id).all()
+        # catalog_data = db.query(Product).filter(Product.tenant_id == tenant_id).all()
         # print("catalog: ", catalog_data)
         return {
-            "whatsapp_data": whatsapp_data,
-            "catalog_data": catalog_data
+            "whatsapp_data": whatsapp_data
+            # "catalog_data": catalog_data
         }
     
     except Exception as e:
@@ -87,22 +85,17 @@ from sqlalchemy.exc import IntegrityError
 @router.get("/refresh-status/")
 def refresh_status(request: Request, db: orm.Session = Depends(get_db)):
     try:
-        # Step 1: Retrieve tenant_id from headers
         tenant_id = request.headers.get("X-Tenant-Id")
-        # print(f"Tenant ID: {tenant_id}")
         if not tenant_id:
             raise HTTPException(status_code=400, detail="Missing Tenant ID in headers")
 
-        # Step 2: Query MessageStatus
         statuses = db.query(MessageStatus).filter(MessageStatus.tenant_id == tenant_id).all()
-        # print(f"Fetched {len(statuses)} statuses from MessageStatus table")
 
         groupedStatuses = {}
         for status in statuses:
             bg_group = status.broadcast_group
             template_name = status.template_name
             key = bg_group if bg_group else template_name
-            # print(f"Processing status with key: {key}, broadcast group: {bg_group}, template name: {template_name}")
 
             if key not in groupedStatuses:
                 groupedStatuses[key] = {
@@ -126,9 +119,7 @@ def refresh_status(request: Request, db: orm.Session = Depends(get_db)):
             if status.failed:
                 groupedStatuses[key]["failed"] += 1
 
-        # Step 3: Query Contacts
         contacts = db.query(Contact).filter(Contact.tenant_id == tenant_id).order_by(Contact.id.asc()).all()
-        # print(f"Fetched {len(contacts)} contacts from Contact table")
 
         for contact in contacts:
             key = contact.template_key or f"Untracked_{tenant_id}"
@@ -136,10 +127,8 @@ def refresh_status(request: Request, db: orm.Session = Depends(get_db)):
             replied = contact.last_replied
 
             if delivered is None or replied is None:
-                # print(f"Skipping contact ID {contact.id} due to missing delivered/replied timestamps")
                 continue
 
-            # print(f"Processing Contact {contact.phone} for key: " ,key)
             if key not in groupedStatuses:
                 groupedStatuses[key] = {
                     "name": "Group B",
@@ -155,19 +144,14 @@ def refresh_status(request: Request, db: orm.Session = Depends(get_db)):
             if time_diff < timedelta(minutes=1):
                 groupedStatuses[key]["replied"] += 1
 
-        # Step 4: Add or update records in MessageStatistics table
-        # print("Grouped Statuses before updating MessageStatistics:", groupedStatuses)
 
         for key, status_data in groupedStatuses.items():
-            # print(f"Processing grouped status for key: {key}, data: {status_data}")
             existing_record = db.query(MessageStatistics).filter(
                 MessageStatistics.tenant_id == tenant_id,
                 MessageStatistics.record_key == key
             ).first()
 
             if existing_record:
-                # print(f"Updating existing record for key: {key}")
-                # Update the existing record
                 existing_record.name = status_data["name"]
                 existing_record.sent = status_data["sent"]
                 existing_record.delivered = status_data["delivered"]
@@ -369,3 +353,44 @@ def delete_group(group_id: str, db: orm.Session = Depends(get_db), x_tenant_id: 
         db.rollback()
         print("Error deleting group:", str(e))
         raise HTTPException(status_code=400, detail="Error deleting the broadcast group") from e
+
+
+@router.post("/message-statistics/")
+@router.patch("/message-statistics/")
+def create_or_update_message_statistics(name: str, tenant_id: str, data: dict, db: orm.Session = Depends(get_db)):
+    """
+    Creates a new entry or updates an existing one in the `message_statistics` table.
+
+    Args:
+        name (str): The name of the message statistics.
+        tenant_id (str): The tenant ID associated with the statistics.
+        data (dict): Dictionary containing the fields to update or create.
+        db (Session): SQLAlchemy database session.
+
+    Returns:
+        dict: A dictionary containing the created/updated message statistics.
+    """
+    try:
+        entry = db.query(MessageStatistics).filter_by(name=name, tenant_id=tenant_id).first()
+
+        if entry:
+            for key, value in data.items():
+                if hasattr(entry, key):
+                    setattr(entry, key, value)
+            db.add(entry)
+            db.commit()
+            db.refresh(entry)
+            return {"message": "Entry updated successfully", "data": entry}
+        else:
+            new_entry = MessageStatistics(name=name, tenant_id=tenant_id, **data)
+            db.add(new_entry)
+            db.commit()
+            db.refresh(new_entry)
+            return {"message": "Entry created successfully", "data": new_entry}
+
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Integrity error. Please check the provided data.")
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
